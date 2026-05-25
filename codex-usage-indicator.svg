@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="16" y1="12" x2="112" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="24" y1="20" x2="104" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7dd3fc"/>
+      <stop offset="0.48" stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#14b8a6"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bg)"/>
+  <path d="M64 22a42 42 0 1 1-36.37 21" fill="none" stroke="url(#ring)" stroke-width="9" stroke-linecap="round"/>
+  <path d="M64 36v28l19 12" fill="none" stroke="#e5f9f2" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M31 76c5 15 18 26 34 26 13 0 25-7 31-18" fill="none" stroke="#22c55e" stroke-width="7" stroke-linecap="round" opacity="0.9"/>
+  <text x="64" y="88" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="800" fill="#f8fafc">CDX</text>
+</svg>
