@@ -33,6 +33,9 @@ Shows up in your top bar as `CDX <percent>%`. Click it for the dropdown menu, or
 - Weekly usage: tracks the secondary Codex usage window, currently returned as 10080 minutes.
 - Account metadata: shows Codex account type, email, and plan type.
 - Detail window: GTK window with progress bars.
+- Open Codex Console menu item (`https://chatgpt.com/codex`).
+- Top-bar warning marker: `*` at 80%+ and `!` at 90%+ usage.
+- One-shot desktop notifications when usage crosses warning/critical thresholds or a new refresh error appears.
 - Auto-refresh: configurable interval, default 5 minutes.
 - Autostart: optional login startup entry.
 
@@ -83,9 +86,30 @@ cp config.example.json ~/.config/codex-usage-widget/config.json
 python3 codex-usage-indicator.py
 ```
 
+## Diagnostics
+
+Run a non-secret auth check without launching GTK:
+
+```bash
+python3 codex-usage-indicator.py --check-auth
+```
+
+For machine-readable output:
+
+```bash
+python3 codex-usage-indicator.py --check-auth --json
+```
+
+The diagnostic checks the Codex CLI path, whether the auth file exists, which
+usage source works, and whether primary/secondary usage windows are present. It
+does not print OAuth tokens or your email address.
+
 ## How It Works
 
 Prefers the private Codex usage endpoint used by Codex clients, then falls back to the Codex CLI app-server JSON-RPC API if the direct OAuth call fails.
+
+Configuration is saved to `~/.config/codex-usage-widget/config.json` with
+`0600` permissions.
 
 Direct endpoint:
 

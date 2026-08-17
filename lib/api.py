@@ -138,10 +138,14 @@ class APIClient:
                 raw = json.loads(r.read().decode())
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
-                raise APIAuthError("Codex OAuth token rejected. Run 'codex login'.") from e
+                raise APIAuthError(
+                    "Codex OAuth token rejected. Run 'codex login'."
+                ) from e
             raise APIError(f"Codex usage API returned HTTP {e.code}") from e
         except urllib.error.URLError as e:
             raise APIError(f"Network error: {e.reason}") from e
+        except TimeoutError as e:
+            raise APIError("Network timeout contacting Codex usage API") from e
         except json.JSONDecodeError as e:
             raise APIError("Invalid response from Codex usage API") from e
 
@@ -193,7 +197,9 @@ class APIClient:
         except (OSError, json.JSONDecodeError) as e:
             raise APIError("Could not read Codex auth file") from e
 
-        token = (auth.get("tokens") or {}).get("access_token") or auth.get("access_token")
+        token = (auth.get("tokens") or {}).get("access_token") or auth.get(
+            "access_token"
+        )
         if not token:
             raise APIError("Codex OAuth token not found")
         return token
@@ -201,7 +207,7 @@ class APIClient:
     def _fetch_cli_rpc(self):
         with CodexRpc(self.codex_path) as rpc:
             account_result = rpc.request("account/read", {"refreshToken": False}) or {}
-            limits_result = rpc.request("account/rateLimits/read", {}) or {}
+            limits_result = rpc.request("account/rateLimits/read", {}, timeout=30) or {}
 
         account = account_result.get("account") or {}
         limits = limits_result.get("rateLimits") or {}

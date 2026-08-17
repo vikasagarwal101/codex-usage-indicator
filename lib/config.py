@@ -25,6 +25,10 @@ def save_config(cfg):
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
+    try:
+        os.chmod(CONFIG_FILE, 0o600)
+    except OSError:
+        pass
 
 
 def fmt_pct(n):
