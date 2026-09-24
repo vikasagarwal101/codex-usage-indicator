@@ -31,8 +31,9 @@ Shows up in your top bar as `CDX <percent>%`. Click it for the dropdown menu, or
 - Panel indicator: lives in your GNOME top bar.
 - Session usage: tracks the primary Codex usage window, currently returned as 300 minutes.
 - Weekly usage: tracks the secondary Codex usage window, currently returned as 10080 minutes.
+- Banked resets: lists available resets with award and expiry times in the menu. Select one and confirm **Use reset** to redeem it; Cancel is the default. Redemption refreshes usage and is never triggered during automatic refresh.
 - Account metadata: shows Codex account type, email, and plan type.
-- Detail window: GTK window with progress bars.
+- Detail window: GTK window with progress bars and banked reset details/actions.
 - Open Codex Console menu item (`https://chatgpt.com/codex`).
 - Top-bar warning marker: `*` at 80%+ and `!` at 90%+ usage.
 - One-shot desktop notifications when usage crosses warning/critical thresholds or a new refresh error appears.
@@ -122,7 +123,8 @@ Fallback app-server methods:
 | Method | Data |
 |---|---|
 | `account/read` | Account type, email, plan type, auth requirement |
-| `account/rateLimits/read` | Primary/secondary usage windows, resets, credits, rate-limit status |
+| `account/rateLimits/read` | Primary/secondary usage windows, banked-reset details, credits, rate-limit status |
+| `account/rateLimitResetCredit/consume` | Redeem one selected banked reset after confirmation |
 
 Observed direct API response shape:
 

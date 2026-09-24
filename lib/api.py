@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 import urllib.error
 import urllib.request
+import uuid
 
 WHAM_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
 
@@ -117,11 +118,22 @@ class APIClient:
 
     def fetch_all(self):
         try:
-            return self._fetch_wham_usage()
+            data = self._fetch_wham_usage()
         except APIAuthError:
             raise
         except APIError:
             return self._fetch_cli_rpc()
+
+        count = (data.get("rate_limit_reset_credits") or {}).get("available_count", 0)
+        data["reset_credits"] = {"availableCount": count, "credits": []}
+        if count:
+            try:
+                details = self._read_reset_credits()
+                if details:
+                    data["reset_credits"] = details
+            except (APIError, OSError):
+                pass
+        return data
 
     def _fetch_wham_usage(self):
         token = self._read_access_token()
@@ -241,10 +253,26 @@ class APIClient:
             "additional_rate_limits": None,
             "spend_control": {"reached": False, "individual_limit": None},
             "rate_limit_reset_credits": {},
+            "reset_credits": limits_result.get("rateLimitResetCredits") or {"availableCount": 0, "credits": []},
             "promo": None,
             "referral_beacon": None,
             "ts": datetime.now(),
         }
+
+    def _read_reset_credits(self):
+        with CodexRpc(self.codex_path) as rpc:
+            result = rpc.request("account/rateLimits/read", {}, timeout=30) or {}
+        return result.get("rateLimitResetCredits")
+
+    def consume_reset(self, credit_id):
+        if not isinstance(credit_id, str) or not credit_id:
+            raise APIError("Select an available reset")
+        with CodexRpc(self.codex_path) as rpc:
+            return rpc.request(
+                "account/rateLimitResetCredit/consume",
+                {"idempotencyKey": str(uuid.uuid4()), "creditId": credit_id},
+                timeout=30,
+            ) or {}
 
     def _wham_window(self, raw):
         if not raw:

@@ -3,6 +3,7 @@ import queue
 import argparse
 import json
 import threading
+from datetime import datetime
 
 import gi
 
@@ -42,6 +43,7 @@ class CodexApp(Gtk.Application):
         self._fetch_thread = None
         self._last_error = ""
         self._last_threshold_notice = ""
+        self._redeeming = False
 
     def do_activate(self):
         self.hold()
@@ -86,6 +88,10 @@ class CodexApp(Gtk.Application):
             self._menu.append(self._mi[key])
 
         self._menu.append(Gtk.SeparatorMenuItem())
+        self._mi["resets"] = Gtk.MenuItem(label="Banked resets: --")
+        self._reset_menu = Gtk.Menu()
+        self._mi["resets"].set_submenu(self._reset_menu)
+        self._menu.append(self._mi["resets"])
 
         mi = Gtk.MenuItem(label="Open Details Window")
         mi.connect("activate", self._on_detail)
@@ -121,6 +127,26 @@ class CodexApp(Gtk.Application):
         self._set_window_labels("primary", d["primary"])
         self._set_window_labels("secondary", d["secondary"])
 
+        resets = d.get("reset_credits") or {}
+        count = resets.get("availableCount") or 0
+        M["resets"].set_label(f"Banked resets: {count} available")
+        for item in self._reset_menu.get_children():
+            self._reset_menu.remove(item)
+            item.destroy()
+        for credit in sorted(resets.get("credits") or [], key=lambda c: c.get("expiresAt") or 0):
+            if credit.get("status") != "available" or not credit.get("id"):
+                continue
+            try:
+                awarded = datetime.fromtimestamp(credit["grantedAt"]).strftime("%b %d %Y %H:%M")
+                expires = datetime.fromtimestamp(credit["expiresAt"]).strftime("%b %d %Y %H:%M")
+            except (KeyError, ValueError, TypeError, OverflowError):
+                awarded = expires = "unknown"
+            item = Gtk.MenuItem(label=f"{credit.get('title') or 'Full reset'} · Awarded {awarded} · Expires {expires}")
+            item.connect("activate", self._on_redeem_reset, credit["id"])
+            self._reset_menu.append(item)
+        M["resets"].set_sensitive(bool(self._reset_menu.get_children()) and not getattr(self, "_redeeming", False))
+        self._reset_menu.show_all()
+
         M["status"].set_label(
             f"Updated {d['ts'].strftime('%H:%M:%S')} via {d.get('source', 'Codex')}"
         )
@@ -143,7 +169,7 @@ class CodexApp(Gtk.Application):
     def _refresh(self):
         self._set_status("Refreshing...")
         self._start_fetch_worker()
-        self._fetch_queue.put("refresh")
+        self._fetch_queue.put(None)
 
     def _start_fetch_worker(self):
         if self._fetch_thread is not None and self._fetch_thread.is_alive():
@@ -155,12 +181,19 @@ class CodexApp(Gtk.Application):
     def _fetch_worker(self):
         while not self._fetch_shutdown:
             try:
-                self._fetch_queue.get(timeout=1)
+                credit_id = self._fetch_queue.get(timeout=1)
             except queue.Empty:
                 continue
             if self._fetch_shutdown:
                 break
             try:
+                if credit_id:
+                    try:
+                        result = self._client.consume_reset(credit_id)
+                    except (APIError, OSError) as e:
+                        GLib.idle_add(self._on_reset_error, str(e))
+                    else:
+                        GLib.idle_add(self._on_reset_result, result)
                 data = self._client.fetch_all()
                 GLib.idle_add(self._on_data, data)
             except APIAuthError as e:
@@ -174,6 +207,7 @@ class CodexApp(Gtk.Application):
         self._data = data
         primary = data.get("primary") or {}
         self._last_error = ""
+        self._redeeming = False
         self._indicator.set_label(_usage_label("CDX", primary.get("used_pct")), "")
         self._maybe_notify_threshold("Codex", primary.get("used_pct"))
         self._update_menu(data)
@@ -182,7 +216,10 @@ class CodexApp(Gtk.Application):
         return False
 
     def _on_error(self, msg):
+        self._redeeming = False
         self._indicator.set_label("CDX ERR", "")
+        if self._data:
+            self._update_menu(self._data)
         if msg != self._last_error:
             self._notify("Codex Usage Error", msg)
         self._last_error = msg
@@ -203,6 +240,52 @@ class CodexApp(Gtk.Application):
     def _auto_refresh(self):
         self._refresh()
         return GLib.SOURCE_CONTINUE
+
+    def _on_redeem_reset(self, _, credit_id):
+        credit = next((c for c in (self._data or {}).get("reset_credits", {}).get("credits", [])
+                       if c.get("id") == credit_id and c.get("status") == "available"), None)
+        if not credit or self._redeeming:
+            return
+        dialog = Gtk.MessageDialog(
+            transient_for=self._win,
+            flags=Gtk.DialogFlags.MODAL,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.NONE,
+            text="Use this banked Codex reset?",
+        )
+        try:
+            expires = datetime.fromtimestamp(credit["expiresAt"]).astimezone().strftime("%b %d %Y %H:%M %Z")
+        except (KeyError, ValueError, TypeError, OverflowError):
+            expires = "at an unknown time"
+        dialog.format_secondary_text(
+            f"{credit.get('title') or 'Full reset'} expires {expires}. "
+            "This uses one banked reset and changes your usage windows."
+        )
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Use reset", Gtk.ResponseType.ACCEPT)
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+        confirmed = dialog.run() == Gtk.ResponseType.ACCEPT
+        dialog.destroy()
+        if confirmed and not self._redeeming:
+            self._redeeming = True
+            self._mi["resets"].set_sensitive(False)
+            self._set_status("Using banked reset...")
+            self._start_fetch_worker()
+            self._fetch_queue.put(credit_id)
+
+    def _on_reset_result(self, result):
+        code = result.get("code")
+        if code in ("reset", "already_redeemed", "alreadyRedeemed"):
+            self._notify("Codex reset used", "Usage is refreshing.")
+        elif code in ("nothingToReset", "noCredit", "nothing_to_reset", "no_credit"):
+            self._notify("Codex reset not used", "No eligible usage window or reset available.")
+        else:
+            self._notify("Codex reset status unknown", "Check Codex usage before retrying.")
+        return False
+
+    def _on_reset_error(self, message):
+        self._notify("Codex reset status unknown", f"{message}. Check Codex usage before retrying.")
+        return False
 
     def _on_detail(self, _):
         if self._win:

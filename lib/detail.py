@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import gi
 
 gi.require_version("Gtk", "3.0")
@@ -60,6 +62,7 @@ class DetailWindow(Gtk.ApplicationWindow):
         self.set_position(Gtk.WindowPosition.CENTER)
         self.data = None
         self._w = {}
+        self._app = app
         self._build()
 
     def _build(self):
@@ -79,6 +82,7 @@ class DetailWindow(Gtk.ApplicationWindow):
         self._build_account(box)
         self._build_window(box, "primary")
         self._build_window(box, "secondary")
+        self._reset_rows = self._frame(box, "Banked resets")
         self._build_status(box)
 
         scroll.add(box)
@@ -150,6 +154,32 @@ class DetailWindow(Gtk.ApplicationWindow):
 
         self._update_window("primary", d.get("primary"))
         self._update_window("secondary", d.get("secondary"))
+
+        for child in self._reset_rows.get_children()[1:]:
+            self._reset_rows.remove(child)
+            child.destroy()
+        resets = d.get("reset_credits") or {}
+        credits = [credit for credit in resets.get("credits") or []
+                   if credit.get("status") == "available" and credit.get("id")]
+        if not credits:
+            self._reset_rows.pack_start(Gtk.Label(
+                label=f"{resets.get('availableCount') or 0} available", xalign=0
+            ), False, False, 0)
+        for credit in sorted(credits, key=lambda c: c.get("expiresAt") or 0):
+            try:
+                awarded = datetime.fromtimestamp(credit["grantedAt"]).astimezone().strftime("%b %d %Y %H:%M %Z")
+                expires = datetime.fromtimestamp(credit["expiresAt"]).astimezone().strftime("%b %d %Y %H:%M %Z")
+            except (KeyError, ValueError, TypeError, OverflowError):
+                awarded = expires = "unknown"
+            label = Gtk.Label(
+                label=f"{credit.get('title') or 'Full reset'} · Awarded {awarded} · Expires {expires}",
+                xalign=0,
+            )
+            label.set_line_wrap(True)
+            self._reset_rows.pack_start(label, False, False, 0)
+            button = Gtk.Button(label="Use reset")
+            button.connect("clicked", self._app._on_redeem_reset, credit["id"])
+            self._reset_rows.pack_start(button, False, False, 0)
 
         W["status"].set_label(
             f"Updated {d['ts'].strftime('%H:%M:%S')} via {d.get('source', 'Codex')}"
