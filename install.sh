@@ -35,6 +35,11 @@ else
     echo "  All dependencies present"
 fi
 
+if ! /usr/bin/python3 -c 'import gi; gi.require_version("Gtk", "3.0"); gi.require_version("AyatanaAppIndicator3", "0.1"); from gi.repository import Gtk, AyatanaAppIndicator3'; then
+    echo "  System Python GTK bindings unavailable. Install dependencies: $DEPS" >&2
+    exit 1
+fi
+
 if ! command -v codex >/dev/null 2>&1; then
     echo ""
     echo "  Codex CLI was not found on PATH."
@@ -71,7 +76,7 @@ cat > "$APP_DIR/${APP_ID}.desktop" << EOF
 Type=Application
 Name=${APP_NAME}
 Comment=Panel indicator for OpenAI Codex usage limits
-Exec=python3 ${INSTALL_DIR}/codex-usage-indicator.py
+Exec=/usr/bin/python3 ${INSTALL_DIR}/codex-usage-indicator.py
 Icon=${INSTALL_DIR}/codex-usage-indicator.svg
 Terminal=false
 Categories=Utility;System;
@@ -104,7 +109,7 @@ echo
 if [[ $LAUNCH_REPLY =~ ^[Yy]$ ]]; then
     pkill -f codex-usage-indicator.py 2>/dev/null || true
     sleep 1
-    setsid python3 "$INSTALL_DIR/codex-usage-indicator.py" </dev/null >/dev/null 2>&1 &
+    setsid /usr/bin/python3 "$INSTALL_DIR/codex-usage-indicator.py" </dev/null >/dev/null 2>&1 &
     echo "  Launched - look for CX in your top panel bar"
 fi
 

@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.log
+.gitnexus
+.claude
+.serena
+AGENTS.md
+CLAUDE.md
